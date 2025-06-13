@@ -3,34 +3,64 @@ class Food {
     int id;
     String name;
     double price;
-
+    ArrayList<Double> ratings = new ArrayList<>();
+    double averageRating = 0.0;
     Food(int id, String name, double price) {
         this.id = id;
         this.name = name;
         this.price = price;
     }
+    
+    void addRating(double rating) {
+        ratings.add(rating);
+        calculateAverageRating();
+    }
+    
+    void calculateAverageRating() {
+        if (ratings.isEmpty()) {
+            averageRating = 0.0;
+            return;
+        }
+        double sum = 0;
+        for (double rating : ratings) {
+            sum += rating;
+        }
+        averageRating = sum / ratings.size();
+    }
+    
+    String getRatingDisplay() {
+        if (ratings.isEmpty()) {
+            return "No ratings yet";
+        }
+        return String.format("%.1f/5 (%d reviews)", averageRating, ratings.size());
+    }
 }
+
 class CustomFoodRequest {
     String customerName;
     String foodName;
     boolean approved = false;
     double price;
+    
     CustomFoodRequest(String customerName, String foodName) {
         this.customerName = customerName;
         this.foodName = foodName;
     }
 }
+
 class PaymentRecord {
     int orderId;
     String customerName;
     double amount;
     String method;
+    boolean paid;
 
     PaymentRecord(int orderId, String customerName, double amount, String method) {
         this.orderId = orderId;
         this.customerName = customerName;
         this.amount = amount;
         this.method = method;
+        this.paid = true;
     }
 }
 
@@ -39,22 +69,42 @@ class Order {
     String customerName;
     ArrayList<Food> items = new ArrayList<>();
     double total = 0;
+    boolean paid = false;
+    boolean cancelled = false;
+    String status = "Active";
 
     Order(int orderId, String customerName) {
         this.orderId = orderId;
         this.customerName = customerName;
     }
-
     void addItem(Food food) {
         items.add(food);
         total += food.price;
+    }    
+    boolean removeItem(int foodId) {
+        for (int i = 0; i < items.size(); i++) {
+            if (items.get(i).id == foodId) {
+                Food removedFood = items.remove(i);
+                total -= removedFood.price;
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    void cancelOrder() {
+        cancelled = true;
+        status = "Cancelled";
+    }
+    
+    void completeOrder() {
+        status = "Completed";
     }
 }
 
 class Booking {
     String name, contact;
     int tableNo, members;
-
     Booking(String name, String contact, int tableNo, int members) {
         this.name = name;
         this.contact = contact;
@@ -73,7 +123,7 @@ public class RestaurantSystem {
     ArrayList<CustomFoodRequest> foodRequests = new ArrayList<>();
     Scanner sc = new Scanner(System.in);
     int orderCounter = 1;
-
+    int nextFoodId = 6; 
     public RestaurantSystem() {
         menu.add(new Food(1, "Biriyani", 150.0));
         menu.add(new Food(2, "Chicken Lollipop", 300.0));
@@ -88,47 +138,66 @@ public class RestaurantSystem {
         }
         return null;
     }
-	void requestCustomFood() {
-        sc.nextLine();
-        System.out.print("Enter your name: ");
-        String customerName = sc.nextLine();
+
+    void requestCustomFood(String customerName) {
         System.out.print("Enter food name: ");
         String foodName = sc.nextLine();
+        for (Food food : menu) {
+            if (food.name.equalsIgnoreCase(foodName)) {
+                System.out.println("This food item already exists in our menu!");
+                return;
+            }
+        }
+        
         CustomFoodRequest newRequest = new CustomFoodRequest(customerName, foodName);
         foodRequests.add(newRequest);
         System.out.println("Your food request for '" + foodName + "' has been submitted. Waiting for admin approval.");
     }
-	void searchFood() {
+
+    void searchFood() {
         System.out.print("Enter food ID to search: ");
         int id = sc.nextInt();
         Food food = findFood(id);
         if (food != null) {
-            System.out.println("Found: " + food.id + ". " + food.name + " " + food.price);
+            System.out.println("Found: " + food.id + ". " + food.name + " - Rs " + food.price);
         } else {
             System.out.println("Food item not found!");
         }
     }
-	void viewAllOrders() {
+
+    void viewAllOrders() {
         if (orders.isEmpty()) {
             System.out.println("No orders yet!");
             return;
         }
+        System.out.println("\n=== ALL ORDERS ===");
         for (Order order : orders) {
-            System.out.printf("Order #%d - %s - Total: %.2f%n", order.orderId, order.customerName, order.total);
-            for (Food food : order.items)
-                System.out.printf("  - %d. %s - %.2f%n", food.id, food.name, food.price);
+            String paymentStatus = order.paid ? "[PAID]" : "[PENDING PAYMENT]";
+            System.out.printf("Order #%d - %s - Total: Rs %.2f %s [%s]%n", 
+                order.orderId, order.customerName, order.total, paymentStatus, order.status);
+            for (Food food : order.items) {
+                System.out.printf("  - %d. %s - Rs %.2f%n", food.id, food.name, food.price);
+            }
+            System.out.println();
         }
     }
-	void addMenuItem() {
+
+    void addMenuItem() {
         System.out.print("Enter food ID: ");
         int id = sc.nextInt();
+        if (findFood(id) != null) {
+            System.out.println("Food item with this ID already exists!");
+            return;
+        }
+        
         sc.nextLine();
         System.out.print("Enter food name: ");
         String name = sc.nextLine();
         System.out.print("Enter price: ");
         double price = sc.nextDouble();
+        
         menu.add(new Food(id, name, price));
-        System.out.println("Menu item added successfully!");
+        System.out.println("Menu item '" + name + "' added successfully!");
     }
 
     void processOrder() {
@@ -138,41 +207,67 @@ public class RestaurantSystem {
         }
         Order order = orderQueue.poll();
         orderHistory.push(order);
-        System.out.println("Processed: Order #" + order.orderId + " - " + order.customerName + " - Total: $" + order.total);
+        System.out.println("Processed: Order #" + order.orderId + " - " + order.customerName + " - Total: Rs " + order.total);
     }
 
     void Payment(Order order) {
-        System.out.println("Order #" + order.orderId);
-        for (Food item : order.items)
-            System.out.println(" - " + item.name + ": Rs " + item.price);
-        
-        System.out.println("Total: Rs " + order.total);
-        System.out.println("Payment Method:\n1. Cash\n2. Card\n3. UPI\n4. Cancel");       
-        int choice = sc.nextInt();
-        sc.nextLine(); 
-        String method = "";
-		switch (choice) {
-			case 1 -> method = "Cash";
-			case 2 -> method = "Card";
-			case 3 -> method = "UPI";
-			case 4 -> {
-				System.out.println("Transaction canceled.");
-				return;
-			}
-			default -> {
-				System.out.println("Invalid choice!");
-				return;
-			}
-		}
-        paymentHistory.add(new PaymentRecord(order.orderId, order.customerName, order.total, method));
-        System.out.println("Total Payment of Rs " + order.total + " done via " + method);
-        System.out.print("Enter payment amount: ");
-        double amountPaid = sc.nextDouble();
-        if (amountPaid >= order.total) {
-            System.out.println("Thank you! You may now exit.");
-        } else {
-            System.out.println("Insufficient payment! Please pay the full amount.");
+        if (order.paid) {
+            System.out.println("This order has already been paid for!");
+            return;
         }
+        
+        if (order.cancelled) {
+            System.out.println("Cannot process payment for cancelled order!");
+            return;
+        }
+
+        System.out.println("\n=== PAYMENT DETAILS ===");
+        System.out.println("Order #" + order.orderId + " - Customer: " + order.customerName);
+        System.out.println("Items ordered:");
+        for (Food item : order.items) {
+            System.out.println(" - " + item.name + ": Rs " + item.price);
+        }
+        
+        System.out.println("Total Amount: Rs " + order.total);
+        System.out.println("\nSelect Payment Method:");
+        System.out.println("1. Cash\n2. Card\n3. UPI\n4. Cancel");
+        System.out.print("Choose payment method: ");
+        
+        int choice = sc.nextInt();
+        String method = "";
+        
+        switch (choice) {
+            case 1 -> method = "Cash";
+            case 2 -> method = "Card";
+            case 3 -> method = "UPI";
+            case 4 -> {
+                System.out.println("Payment canceled.");
+                return;
+            }
+            default -> {
+                System.out.println("Invalid payment method!");
+                return;
+            }
+        }
+
+        System.out.print("Enter payment amount: Rs ");
+        double amountPaid = sc.nextDouble();
+        
+        if (amountPaid < order.total) {
+            System.out.printf("Insufficient payment! You need Rs %.2f more.%n", (order.total - amountPaid));
+            return;
+        } else if (amountPaid == order.total) {
+            System.out.println("Exact payment received!");
+        } else {
+            double change = amountPaid - order.total;
+            System.out.printf("Payment received! Your change: Rs %.2f%n", change);
+        }
+        order.paid = true;
+        order.completeOrder();
+        paymentHistory.add(new PaymentRecord(order.orderId, order.customerName, order.total, method));        
+        System.out.println("Payment of Rs " + order.total + " completed via " + method);
+        System.out.println("Thank you for your payment! You may now rate your food items.");
+        rateOrderItems(order);
     }
 
     void viewPaymentHistory() {
@@ -181,144 +276,434 @@ public class RestaurantSystem {
             return;
         }
 
-        System.out.println("\n PAYMENT HISTORY ");
-        for (PaymentRecord record : paymentHistory)
+        System.out.println("\n=== PAYMENT HISTORY ===");
+        double totalRevenue = 0;
+        for (PaymentRecord record : paymentHistory) {
             System.out.printf("Order #%d - %s - Rs %.2f - %s%n",
-                              record.orderId, record.customerName, record.amount, record.method);
+                record.orderId, record.customerName, record.amount, record.method);
+            totalRevenue += record.amount;
+        }
+        System.out.printf("Total Revenue: Rs %.2f%n", totalRevenue);
     }
 
     void showMenu() {
-        System.out.println("\n MENU ");
-        for (Food food : menu)
-            System.out.println(food.id + " " + food.name + " " + food.price);
+        System.out.println("\n=== MENU ===");
+        for (Food food : menu) {
+            System.out.printf("%d. %s - Rs %.2f [%s]%n", 
+                food.id, food.name, food.price, food.getRatingDisplay());
+        }
     }
 
-    void bookTable() {
-        sc.nextLine();
-        System.out.print("Customer Name: ");
-        String name = sc.nextLine();
+    void bookTable(String customerName) {
         System.out.print("Contact Number: ");
         String contact = sc.nextLine();
         System.out.print("Table Number: ");
         int tableNo = sc.nextInt();
+        for (Booking booking : bookings) {
+            if (booking.tableNo == tableNo) {
+                System.out.println("Table " + tableNo + " is already booked!");
+                return;
+            }
+        }
+        
         System.out.print("Number of Members: ");
         int members = sc.nextInt();
-        bookings.add(new Booking(name, contact, tableNo, members));
-        System.out.println("Table booked successfully.");
+        
+        bookings.add(new Booking(customerName, contact, tableNo, members));
+        System.out.println("Table " + tableNo + " booked successfully for " + members + " members under name: " + customerName);
     }
 
-    void placeOrder() {
-        System.out.print("Enter your name: ");
-        sc.nextLine();
-        String name = sc.nextLine();
-        Order order = new Order(orderCounter++, name);
+    void viewBookings() {
+        if (bookings.isEmpty()) {
+            System.out.println("No table bookings!");
+            return;
+        }
+        
+        System.out.println("\n=== TABLE BOOKINGS ===");
+        for (Booking booking : bookings) {
+            System.out.printf("Table %d - %s - Contact: %s - Members: %d%n",
+                booking.tableNo, booking.name, booking.contact, booking.members);
+        }
+    }
+
+    void placeOrder(String customerName) {
+        Order order = new Order(orderCounter++, customerName);
+        
         while (true) {
             showMenu();
             System.out.print("Enter food ID (0 to finish): ");
-            String foodId = sc.nextLine(); 
-			if (foodId.toLowerCase().equals("finish") || foodId.equals("0")) break;
-			int id = Integer.parseInt(foodId); 
-			Food food = findFood(id); 
-			if (food != null) { 
-				order.addItem(food); 
-				System.out.println("Added: " + food.name); 
-			} else { 
-				System.out.println("Food not found!"); 
-			}
-		} 
+            String input = sc.nextLine();
+            
+            if (input.equals("0") || input.toLowerCase().equals("finish")) {
+                break;
+            }
+            
+            try {
+                int id = Integer.parseInt(input);
+                Food food = findFood(id);
+                if (food != null) {
+                    order.addItem(food);
+                    System.out.println("Added: " + food.name + " - Rs " + food.price);
+                } else {
+                    System.out.println("Food item not found!");
+                }
+            } catch (NumberFormatException e) {
+                System.out.println("Please enter a valid food ID!");
+            }
+        }
+        
         if (!order.items.isEmpty()) {
             orders.add(order);
             orderQueue.add(order);
-            System.out.println("Order placed successfully!");
-            System.out.println("Order #" + order.orderId + " - " + order.customerName + " - Total: " + order.total);
+            System.out.println("\nOrder placed successfully!");
+            System.out.printf("Order #%d - %s - Total: Rs %.2f%n", 
+                order.orderId, order.customerName, order.total);
         } else {
             System.out.println("No items added to order!");
         }
     }
-	
-    void customerPanel() {
-        while (true) {
-            System.out.println("\n CUSTOMER PANEL ");
-            System.out.println("1. View Menu\n2. Book Table\n3. Place Order\n4. View Cart\n5. Customer Request\n6. Payment\n7. Exit");
-            System.out.print("Choose: ");
-            int ch = sc.nextInt();
-            if (ch == 1) showMenu();
-            else if (ch == 2) bookTable();
-            else if (ch == 3) placeOrder();
-            else if (ch == 4) viewAllOrders();
-			else if (ch == 5) requestCustomFood();
-            else if (ch == 6) {
-                if (!orders.isEmpty()) {
-                    Payment(orders.get(orders.size() - 1));
-                } else {
-                    System.out.println("No orders placed yet!");
-                }
-            } else if (ch == 7) break;
-            else System.out.println("Invalid choice!");
-        }
-    }
 
-    void adminapproval() {
-		if (foodRequests.isEmpty()) {
-            System.out.println("No custom food requests.");
-            return;
-        }
-        System.out.println("\nPending Custom Food Requests:");
-        for (CustomFoodRequest request : foodRequests) {
-            if (!request.approved) {
-                System.out.println("Request by " + request.customerName + ": " + request.foodName);
-                System.out.print("Approve this item? (yes/no): ");
-                String response = sc.next().toLowerCase();
-                if (response.equals("yes")) {
-                    System.out.print("Set price for " + request.foodName + ": ");
-                    request.price = sc.nextDouble();
-                    request.approved = true;
-                    menu.add(new Food(menu.size() + 1, request.foodName, request.price));
-                    System.out.println(request.foodName + " approved and added to the menu at Rs " + request.price);
-                } else {
-                    System.out.println("Request rejected.");
-                }
+    Order getCurrentCustomerOrder(String customerName) {
+        for (int i = orders.size() - 1; i >= 0; i--) {
+            Order order = orders.get(i);
+            if (order.customerName.equalsIgnoreCase(customerName) && !order.paid && !order.cancelled) {
+                return order;
             }
         }
-	}
-	void adminPanel(){
+        return null;
+    }
+    
+    void rateOrderItems(Order order) {
+        System.out.println("\n=== RATE YOUR FOOD ITEMS ===");
+        System.out.println("Would you like to rate the food items? (yes/no)");
+        String response = sc.next().toLowerCase();
+        
+        if (response.equals("yes")) {
+            for (Food food : order.items) {
+                boolean validRating = false;
+                while (!validRating) {
+                    System.out.print("Rate " + food.name + " (1-5 stars): ");
+                    try {
+                        if (sc.hasNextInt()) {
+                            int rating = sc.nextInt();
+                            if (rating >= 1 && rating <= 5) {
+                                food.addRating(rating);
+                                System.out.println("Thank you for rating " + food.name + "!");
+                                validRating = true;
+                            } else {
+                                System.out.println("Invalid rating! Please rate between 1-5.");
+                            }
+                        } else {
+                            String invalidInput = sc.next(); // Clear the invalid input
+                            System.out.println("Invalid input! Please enter a whole number between 1-5.");
+                        }
+                    } catch (Exception e) {
+                        sc.next(); // Clear the invalid input
+                        System.out.println("Invalid input! Please enter a whole number between 1-5.");
+                    }
+                }
+            }
+            System.out.println("Thank you for your feedback!");
+        }
+    }
+    
+    void modifyOrder(String customerName) {
+        Order order = getCurrentCustomerOrder(customerName);
+        if (order == null) {
+            System.out.println("No active order found to modify!");
+            return;
+        }
+        
         while (true) {
-            System.out.println("\n ADMIN PANEL ");
-            System.out.println("1. View Orders\n2. Process Order\n3. Add Menu Item\n4. Food Items\n5. Search Food\n6. View Payment History\n7. Back");
-            System.out.print("Choose: ");
-            int ch = sc.nextInt();
-            switch (ch) {
-                case 1 -> viewAllOrders();
-                case 2 -> processOrder();
-                case 3 -> addMenuItem();
-                case 4 -> showMenu();
-                case 5 -> searchFood();
-                case 6 -> viewPaymentHistory();
-                case 7 -> { return; }
+            System.out.println("\n=== MODIFY ORDER #" + order.orderId + " ===");
+            System.out.println("Current items:");
+            for (int i = 0; i < order.items.size(); i++) {
+                Food food = order.items.get(i);
+                System.out.printf("%d. %s - Rs %.2f%n", (i+1), food.name, food.price);
+            }
+            System.out.printf("Current Total: Rs %.2f%n", order.total);
+            
+            System.out.println("\nOptions:");
+            System.out.println("1. Add Item");
+            System.out.println("2. Remove Item");
+            System.out.println("3. Cancel Entire Order");
+            System.out.println("4. Finish Modifications");
+            System.out.print("Choose option: ");
+            
+            int choice = sc.nextInt();
+            
+            switch (choice) {
+                case 1 -> {
+                    showMenu();
+                    System.out.print("Enter food ID to add: ");
+                    int foodId = sc.nextInt();
+                    Food food = findFood(foodId);
+                    if (food != null) {
+                        order.addItem(food);
+                        System.out.println("Added: " + food.name);
+                    } else {
+                        System.out.println("Food item not found!");
+                    }
+                }
+                case 2 -> {
+                    if (order.items.isEmpty()) {
+                        System.out.println("No items to remove!");
+                        break;
+                    }
+                    System.out.print("Enter item number to remove (1-" + order.items.size() + "): ");
+                    int itemNum = sc.nextInt();
+                    if (itemNum >= 1 && itemNum <= order.items.size()) {
+                        Food removedFood = order.items.remove(itemNum - 1);
+                        order.total -= removedFood.price;
+                        System.out.println("Removed: " + removedFood.name);
+                    } else {
+                        System.out.println("Invalid item number!");
+                    }
+                }
+                case 3 -> {
+                    System.out.print("Are you sure you want to cancel this order? (yes/no): ");
+                    String confirm = sc.next().toLowerCase();
+                    if (confirm.equals("yes")) {
+                        order.cancelOrder();
+                        System.out.println("Order #" + order.orderId + " has been cancelled.");
+                        return;
+                    }
+                }
+                case 4 -> {
+                    if (order.items.isEmpty()) {
+                        System.out.print("Your order is empty. Cancel the order? (yes/no): ");
+                        String confirm = sc.next().toLowerCase();
+                        if (confirm.equals("yes")) {
+                            order.cancelOrder();
+                            System.out.println("Order #" + order.orderId + " has been cancelled.");
+                        }
+                    } else {
+                        System.out.println("Order modifications completed!");
+                        System.out.printf("Final Total: Rs %.2f%n", order.total);
+                    }
+                    return;
+                }
                 default -> System.out.println("Invalid choice!");
             }
         }
     }
-    public static void main(String[] args) {
-        RestaurantSystem app = new RestaurantSystem();
+    
+    void removeMenuItem() {
+        if (menu.isEmpty()) {
+            System.out.println("Menu is empty!");
+            return;
+        }
+        
+        showMenu();
+        System.out.print("Enter food ID to remove: ");
+        int foodId = sc.nextInt();
+        
+        Food foodToRemove = findFood(foodId);
+        if (foodToRemove != null) {
+            System.out.print("Are you sure you want to remove '" + foodToRemove.name + "'? (yes/no): ");
+            String confirm = sc.next().toLowerCase();
+            if (confirm.equals("yes")) {
+                menu.remove(foodToRemove);
+                System.out.println("Menu item '" + foodToRemove.name + "' removed successfully!");
+            } else {
+                System.out.println("Removal cancelled.");
+            }
+        } else {
+            System.out.println("Food item not found!");
+        }
+    }
+    
+    void viewFoodRatings() {
+        if (menu.isEmpty()) {
+            System.out.println("No food items in menu!");
+            return;
+        }
+        
+        System.out.println("\n=== FOOD RATINGS ===");
+        for (Food food : menu) {
+            System.out.printf("%s - Rs %.2f%n", food.name, food.price);
+            System.out.printf("  Rating: %s%n", food.getRatingDisplay());
+            if (!food.ratings.isEmpty()) {
+                System.out.print("  Individual ratings: ");
+                for (int i = 0; i < food.ratings.size(); i++) {
+                    System.out.print(food.ratings.get(i));
+                    if (i < food.ratings.size() - 1) System.out.print(", ");
+                }
+                System.out.println();
+            }
+            System.out.println();
+        }
+    }
+
+    void customerPanel() {
+        System.out.print("Enter your name: ");
+        sc.nextLine();
+        String customerName = sc.nextLine();
+        
         while (true) {
-            System.out.println("\n RESTAURANT SYSTEM ");
-            System.out.println("1. Customer\n2. Admin\n3. Adminapproval\n4. Exit");
-            System.out.print("Choose: ");
-            int ch = app.sc.nextInt();
-            if (ch == 1) app.customerPanel();
-            else if (ch == 2) { 
-                System.out.println("Enter passkey:");
-                int a = app.sc.nextInt();
-                if (a == 10) app.adminPanel();
-            } else if (ch == 3) {
-				System.out.println("Enter passkey:");
-                int b = app.sc.nextInt();
-                if (b == 10) app.adminapproval();
-			} else if (ch == 4) {
-                System.out.println("Goodbye!");
-                break;
-            } else System.out.println("Invalid choice!");
+            System.out.println("\n=== CUSTOMER PANEL - Welcome " + customerName + " ===");
+            System.out.println("1. View Menu");
+            System.out.println("2. Book Table");
+            System.out.println("3. Place Order");
+            System.out.println("4. View My Orders");
+            System.out.println("5. Modify Current Order");
+            System.out.println("6. Request Custom Food");
+            System.out.println("7. Make Payment");
+            System.out.println("8. Exit Restaurant");
+            System.out.print("Choose option: ");
+            
+            int ch = sc.nextInt();
+            
+            switch (ch) {
+                case 1 -> showMenu();
+                case 2 -> {
+                    sc.nextLine(); 
+                    bookTable(customerName);
+                }
+                case 3 -> {
+                    sc.nextLine(); 
+                    placeOrder(customerName);
+                }
+                case 4 -> {
+                    boolean hasOrders = false;
+                    System.out.println("\n=== YOUR ORDERS ===");
+                    for (Order order : orders) {
+                        if (order.customerName.equalsIgnoreCase(customerName)) {
+                            hasOrders = true;
+                            String paymentStatus = order.paid ? "[PAID]" : "[PENDING PAYMENT]";
+                            System.out.printf("Order #%d - Total: Rs %.2f %s [%s]%n", 
+                                order.orderId, order.total, paymentStatus, order.status);
+                            for (Food food : order.items) {
+                                System.out.printf("  - %s - Rs %.2f%n", food.name, food.price);
+                            }
+                            System.out.println();
+                        }
+                    }
+                    if (!hasOrders) {
+                        System.out.println("You have no orders yet!");
+                    }
+                }
+                case 5 -> modifyOrder(customerName);
+                case 6 -> {
+                    sc.nextLine(); 
+                    requestCustomFood(customerName);
+                }
+                case 7 -> {
+                    Order unpaidOrder = getCurrentCustomerOrder(customerName);
+                    if (unpaidOrder != null) {
+                        Payment(unpaidOrder);
+                    } else {
+                        System.out.println("No pending orders found for payment!");
+                    }
+                }
+                case 8 -> {
+                    Order unpaidOrder = getCurrentCustomerOrder(customerName);
+                    if (unpaidOrder != null) {
+                        System.out.println("Please complete payment for Order #" + unpaidOrder.orderId + " before leaving!");
+                        System.out.println("Total amount due: Rs " + unpaidOrder.total);
+                    } else {
+                        System.out.println("Thank you for visiting! Have a great day!");
+                        return;
+                    }
+                }
+                default -> System.out.println("Invalid choice! Please try again.");
+            }
+        }
+    }
+
+    void adminApproval() {
+        System.out.print("Enter admin passkey: ");
+        int passkey = sc.nextInt();
+        if (passkey != 10) {
+            System.out.println("Invalid passkey!");
+            return;
+        }
+
+        if (foodRequests.isEmpty()) {
+            System.out.println("No custom food requests.");
+            return;
+        }        
+        System.out.println("\n=== PENDING CUSTOM FOOD REQUESTS ===");
+        boolean hasUnapproved = false;        
+        for (CustomFoodRequest request : foodRequests) {
+            if (!request.approved) {
+                hasUnapproved = true;
+                System.out.println("Request by " + request.customerName + ": " + request.foodName);
+                System.out.print("Approve this item? (yes/no): ");
+                String response = sc.next().toLowerCase();
+                
+                if (response.equals("yes")) {
+                    System.out.print("Set price for " + request.foodName + ": Rs ");
+                    request.price = sc.nextDouble();
+                    request.approved = true;
+                    menu.add(new Food(nextFoodId++, request.foodName, request.price));
+                    System.out.println(request.foodName + " approved and added to menu at Rs " + request.price);
+                } else {
+                    System.out.println("Request for " + request.foodName + " rejected.");
+                }
+            }
+        }        
+        if (!hasUnapproved) {
+            System.out.println("All requests have been processed.");
+        }
+    }
+    void adminPanel() {
+        System.out.print("Enter admin passkey: ");
+        int passkey = sc.nextInt();
+        if (passkey != 10) {
+            System.out.println("Invalid passkey!");
+            return;
+        }
+        while (true) {
+            System.out.println("\n=== ADMIN PANEL ===");
+            System.out.println("1. View All Orders");
+            System.out.println("2. Process Order");
+            System.out.println("3. Add Menu Item");
+            System.out.println("4. Remove Menu Item");
+            System.out.println("5. View Menu");
+            System.out.println("6. Search Food");
+            System.out.println("7. View Payment History");
+            System.out.println("8. View Table Bookings");
+            System.out.println("9. View Food Ratings");
+            System.out.println("10. Back to Main Menu");
+            System.out.print("Choose option: ");            
+            int ch = sc.nextInt();            
+            switch (ch) {
+                case 1 -> viewAllOrders();
+                case 2 -> processOrder();
+                case 3 -> addMenuItem();
+                case 4 -> removeMenuItem();
+                case 5 -> showMenu();
+                case 6 -> searchFood();
+                case 7 -> viewPaymentHistory();
+                case 8 -> viewBookings();
+                case 9 -> viewFoodRatings();
+                case 10 -> { return; }
+                default -> System.out.println("Invalid choice! Please try again.");
+            }
+        }
+    }
+    public static void main(String[] args) {
+        RestaurantSystem app = new RestaurantSystem();        
+        System.out.println("=== WELCOME TO RESTAURANT MANAGEMENT SYSTEM ===");       
+        while (true) {
+            System.out.println("\n=== MAIN MENU ===");
+            System.out.println("1. Customer Portal");
+            System.out.println("2. Admin Panel");
+            System.out.println("3. Admin Food Approval");
+            System.out.println("4. Exit System");
+            System.out.print("Choose option: ");            
+            int ch = app.sc.nextInt();            
+            switch (ch) {
+                case 1 -> app.customerPanel();
+                case 2 -> app.adminPanel();
+                case 3 -> app.adminApproval();
+                case 4 -> {
+                    System.out.println("Thank you for using Restaurant Management System!");
+                    System.exit(0);
+                }
+                default -> System.out.println("Invalid choice! Please try again.");
+            }
         }
     }
 }
